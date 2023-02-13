@@ -1,5 +1,6 @@
 package com.vinorsoft.gpt.service.chat.services.impl;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
@@ -36,26 +37,40 @@ public class MessageServiceImpl implements MessageService {
 	private static final Logger logger = LoggerFactory.getLogger(MessageServiceImpl.class);
 	@Autowired
 	MessageRepo messageRepo;
-	
+
 	@Autowired
 	private Pagination pagination;
-	
+
 	@Autowired
 	MessageConverter messageConverter;
-	
+
 	@Autowired
 	RestTemplate restTemplate;
-	
+
 	@Autowired
 	ConversationService conversationService;
-	
+
 	@Override
 	public ResponseEntity<Object> save(MessageDto dto) {
-		
+
 		Map<String, Object> response = new HashMap<>();
-		
-		//Lấy reply từ GPT
+
+		// Lấy reply từ GPT
 		GPTResponseDto result;
+
+		// Lưu message người dùng gửi lên
+		Message message;
+		try {
+			message = messageConverter.toEntity(dto);
+			message.setDateCreate(new Date());
+			messageRepo.save(message);
+		} catch (Exception e) {
+			logger.info("Lỗi khi lưu tin nhắn user! ");
+			response.put("code", HttpServletResponse.SC_BAD_REQUEST);
+			response.put("data", null);
+			response.put("message", "Lỗi khi lưu tin nhắn user! ");
+			return ResponseEntity.ok(response);
+		}
 		try {
 			HttpHeaders headers = new HttpHeaders();
 			headers.setContentType(MediaType.APPLICATION_JSON);
@@ -70,26 +85,14 @@ public class MessageServiceImpl implements MessageService {
 					GPTResponseDto.class);
 
 			result = rp.getBody();
-		}
-		catch (Exception e) {
-			logger.info("Lỗi request đến GPT API! ");
+			String reply = result.getReply().replaceAll("\n", "<br>").strip();
+			result.setReply(reply);
+		} catch (Exception e) {
+			logger.info("Lỗi request đến GPT API! : " + e.toString());
 			response.put("code", HttpServletResponse.SC_BAD_REQUEST);
-			response.put("data", null);
+			response.put("data", "Error getting response!");
 			response.put("message", "Lỗi request đến GPT API! ");
-			return ResponseEntity.ok(response);
-		}
-		
-		//Lưu message người dùng gửi lên
-		Message message;
-		try {
-			message = messageConverter.toEntity(dto);
-			message.setDateCreate(new Date());
-			messageRepo.save(message);
-		}catch (Exception e) {
-			logger.info("Lỗi khi lưu tin nhắn user! ");
-			response.put("code", HttpServletResponse.SC_BAD_REQUEST);
-			response.put("data", null);
-			response.put("message", "Lỗi khi lưu tin nhắn user! ");
+			messageRepo.delete(message);
 			return ResponseEntity.ok(response);
 		}
 		// Lưu tin nhắn GPT
@@ -101,35 +104,38 @@ public class MessageServiceImpl implements MessageService {
 			messageGPT.setDateCreate(new Date());
 			messageGPT.setType(0);
 			messageRepo.save(messageGPT);
-		}
-		catch (Exception e) {
+		} catch (Exception e) {
 			logger.info("Lỗi khi lưu tin nhắn gpt! ");
 			response.put("code", HttpServletResponse.SC_BAD_REQUEST);
 			response.put("data", null);
 			response.put("message", "Lỗi khi lưu tin nhắn gpt! ");
 			return ResponseEntity.ok(response);
 		}
-		
-		//Khi hội thoại 6, hoặc 7 câu thì đặt title
-		
+
+		// Khi hội thoại 6, hoặc 7 câu hoặc có > 120 words thì đặt title
+
 		List<Message> longMessage = this.getMessageByConversationId(dto.getConversationId());
 		Integer size = longMessage.size();
-		if(size > 5 && size < 8) {
+		String longMessageContent = "";
+		for(Message item : longMessage) {
+			longMessageContent += item.getContent() + ";";
+		}
+		if ((size > 5 && size < 8) || longMessageContent.length() > 120) {
 			String updateTitle = conversationService.updateTitle(dto.getConversationId());
 			logger.info(updateTitle);
 		}
-		
+
 		return ResponseEntity.ok(messageConverter.toDto(messageGPT));
 	}
 
 	@Override
 	public PaginationDto getPageMessageByConversationId(String id, Integer page, Integer limit) {
 		List<Message> messages = messageRepo.findByConversationId(id);
-		List<Message> sortedList = messages.stream()
-				.sorted(Comparator.comparing(Message::getDateCreate).reversed()).collect(Collectors.toList());
-		
+		List<Message> sortedList = messages.stream().sorted(Comparator.comparing(Message::getDateCreate))
+				.collect(Collectors.toList());
+
 		PaginationDto result = pagination.toPage(sortedList, page, limit);
-		
+
 		return result;
 	}
 
