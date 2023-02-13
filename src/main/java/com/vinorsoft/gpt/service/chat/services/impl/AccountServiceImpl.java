@@ -53,7 +53,7 @@ public class AccountServiceImpl implements AccountService {
 
 	public final Integer MAX_FAILED_ATTEMPTS = 5;
 
-	private static final long LOCK_TIME_DURATION = 10 * 60 * 1000;
+	private static final long RESET_PASSWORD_DURATION = 10 * 60 * 1000;
 
 	@Autowired
 	private AccountRepo accountRepo;
@@ -81,12 +81,12 @@ public class AccountServiceImpl implements AccountService {
 		List<Account> accounts = accountRepo.findByEmail(email);
 
 		if (accounts.size() == 0) {
-			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null, "Địa chỉ email không đúng!");
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "error", "Địa chỉ email không đúng!");
 		}
 		
 		Account account = accounts.get(0);
 		account.setResetPasswordToken(generateToken());
-		account.setResetTokenCreate(new Date());
+		account.setResetTokenCreate(new Date(System.currentTimeMillis()));
 		account = accountRepo.save(account);
 
 		return ResponseEntity.badRequest().body(account.getResetPasswordToken());
@@ -105,15 +105,15 @@ public class AccountServiceImpl implements AccountService {
 		MimeMessage message = mailSender.createMimeMessage();
 		MimeMessageHelper helper = new MimeMessageHelper(message);
 
-		helper.setFrom("vinorsoft@gmail.com", "Vinorsoft Support");
+		helper.setFrom("chatgpt@vinorsoft.com", "Chat GPT Vinorsoft Support");
 		helper.setTo(email);
 
-		String subject = "Here's the link to reset your password";
+		String subject = "Xác nhận yêu cầu đổi mật khẩu";
 
-		String content = "<p>Hello,</p>" + "<p>You have requested to reset your password.</p>"
-				+ "<p>Click the link below to change your password:</p>" + "<p><a href=\"" + resetPasswordLink
-				+ "\">Change my password</a></p>" + "<br>" + "<p>Ignore this email if you do remember your password, "
-				+ "or you have not made the request.</p>";
+		String content = "<p>Xin chào,</p>" + "<p>Chúng tôi nhận được yêu cầu đổi mật khẩu của bạn.</p>"
+				+ "<p>Vui lòng nhấn vào dường link dưới đây để cập nhật mật khẩu của bạn:</p>" + "<p><a href=\"" + resetPasswordLink
+				+ "\">Yêu cầu đổi mật khẩu</a></p>" + "<br>" + "<p>Yêu cầu này có hiệu lực trong 10 phút. Bỏ qua email này nếu bạn đã nhớ mật khẩu "
+				+ "hoặc bạn không phải là người thực hiện yêu cầu này! Trân trọng.</p>";
 
 		helper.setSubject(subject);
 
@@ -123,29 +123,31 @@ public class AccountServiceImpl implements AccountService {
 	}
 
 	@Override
-	public ResponseEntity<String> resetPassword(String token, String password) {
-//		Optional<Account> accountOptional = Optional.ofNullable(accountRepo.findByResetPassToken(token));
-//
-//		if (!accountOptional.isPresent()) {
-//			return new ResponseEntity<>("Invalid email id.", HttpStatus.UNAUTHORIZED);
-//		}
-//
-//		LocalDateTime tokenCreationDate = accountOptional.get().getTokenCreationDate();
-//
-//		if (isTokenExpired(tokenCreationDate)) {
-//			return new ResponseEntity<>("Token expired.", HttpStatus.NOT_FOUND);
-//
-//		}
-//
-//		Account account = accountOptional.get();
-//
-//		account.setPassword(password);
-//		account.setResetPassToken(null);
-//		account.setTokenCreationDate(null);
-//
-//		accountRepo.save(account);
+	public ResponseEntity<Object> resetPassword(String token, String password) {
+		List<Account> accounts = accountRepo.findByResetPasswordToken(token);
 
-		return new ResponseEntity<>("Your password successfully updated.", HttpStatus.OK);
+		if (accounts.size() == 0) {
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "error", "Mã không hợp lệ!");
+		}
+
+		Account account = accounts.get(0);
+
+		if (new Date(account.getResetTokenCreate().getTime() + RESET_PASSWORD_DURATION).before(new Date())) {
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "error", "Đã quá hạn yêu cầu! Vui lòng thực hiện lại!");
+
+		}
+
+		account.setPassword(password);
+		account.setResetPasswordToken(null);
+		account.setResetTokenCreate(null);
+
+		try {
+			accountRepo.save(account);
+		} catch (Exception e) {
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "error", "Lỗi khi lưu mật khẩu mới. Vui long thử lại!");
+		}
+
+		return responseFormat.response(HttpServletResponse.SC_OK, null, "Thay đổi mật khẩu thành công!");
 	}
 
 	@Override

@@ -1,5 +1,6 @@
 package com.vinorsoft.gpt.service.chat.services.impl;
 
+import java.text.SimpleDateFormat;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
@@ -11,6 +12,7 @@ import java.util.stream.Collectors;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.text.StringEscapeUtils;
+import org.aspectj.weaver.NewConstructorTypeMunger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,7 +66,8 @@ public class ConversationServiceImpl implements ConversationService {
 			Conversation conversation = conversationConverter.toEntity(dto);
 			conversation.setDateCreate(new Date());
 			conversation.setStatus(1);
-			conversation.setTitle("Hội thoại mới!");
+			SimpleDateFormat formatter = new SimpleDateFormat("hh:mm dd/MM/yyyy");
+			conversation.setTitle("Chat " + formatter.format(new Date()));
 			conversationRepo.save(conversation);
 
 			logger.info("Tạo hội thoại thành công! ");
@@ -85,6 +88,9 @@ public class ConversationServiceImpl implements ConversationService {
 	public String updateTitle(String id) {
 		try {
 			Conversation conversation = conversationRepo.getById(UUID.fromString(id));
+			if(!conversation.getTitle().startsWith("Chat ")) {
+				return "This conversation had updated title!";
+			}
 			List<Message> messages = messageRepo.findByConversationId(id);
 			String all_message = "Title this conversation: ";
 			for (Message item : messages) {
@@ -110,7 +116,7 @@ public class ConversationServiceImpl implements ConversationService {
 			conversationRepo.save(conversation);
 
 			logger.info("Conversation " + id + " has updated with title: " + result.getReply());
-			return "Conversation " + id + " has updated with title: " + result.getReply();
+			return result.getReply();
 
 		} catch (Exception e) {
 			logger.info("Error when update Conversation title! ");

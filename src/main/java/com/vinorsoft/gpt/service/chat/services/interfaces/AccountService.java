@@ -19,7 +19,7 @@ public interface AccountService {
 
     void sendForgotPasswordEmail(String email, String resetPasswordLink) throws MessagingException, UnsupportedEncodingException;
 
-    ResponseEntity<String> resetPassword(String token, String password);
+    ResponseEntity<Object> resetPassword(String token, String password);
 	
     ResponseEntity<Object> findByUsername(String username);
 	

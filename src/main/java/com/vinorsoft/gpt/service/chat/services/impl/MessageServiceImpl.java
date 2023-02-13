@@ -85,7 +85,8 @@ public class MessageServiceImpl implements MessageService {
 					GPTResponseDto.class);
 
 			result = rp.getBody();
-			String reply = result.getReply().replaceAll("\n", "<br>").strip();
+//			String reply = result.getReply().replaceAll("^\\n|\\n$", "").replaceAll("\n", "<br>");
+			String reply = result.getReply().replaceAll("^\\n|\\n$", "");
 			result.setReply(reply);
 		} catch (Exception e) {
 			logger.info("Lỗi request đến GPT API! : " + e.toString());
@@ -117,15 +118,23 @@ public class MessageServiceImpl implements MessageService {
 		List<Message> longMessage = this.getMessageByConversationId(dto.getConversationId());
 		Integer size = longMessage.size();
 		String longMessageContent = "";
+		String updateTitle = "";
 		for(Message item : longMessage) {
 			longMessageContent += item.getContent() + ";";
 		}
-		if ((size > 5 && size < 8) || longMessageContent.length() > 120) {
-			String updateTitle = conversationService.updateTitle(dto.getConversationId());
+		if ((size > 5) || longMessageContent.length() > 120) {
+			updateTitle = conversationService.updateTitle(dto.getConversationId());
 			logger.info(updateTitle);
 		}
+		
+		if(updateTitle.equals("This conversation had updated title!"))
+			updateTitle = "";
 
-		return ResponseEntity.ok(messageConverter.toDto(messageGPT));
+		response.put("code", HttpServletResponse.SC_OK);
+		response.put("data", messageConverter.toDto(messageGPT));
+		response.put("title_change", updateTitle);
+		
+		return ResponseEntity.ok(response);
 	}
 
 	@Override

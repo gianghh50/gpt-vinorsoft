@@ -18,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mail.MailException;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -27,7 +26,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -35,19 +33,19 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.vinorsoft.gpt.service.chat.custom.ResponseFormat;
 import com.google.gson.Gson;
+import com.vinorsoft.gpt.service.chat.custom.ResponseFormat;
 import com.vinorsoft.gpt.service.chat.custom.TokenUtilities;
 import com.vinorsoft.gpt.service.chat.dto.AccountSignUpDto;
 import com.vinorsoft.gpt.service.chat.dto.RefreshTokenResponse;
 import com.vinorsoft.gpt.service.chat.dto.request.EmailRequest;
 import com.vinorsoft.gpt.service.chat.dto.request.LoginRequest;
+import com.vinorsoft.gpt.service.chat.dto.request.ResetPasswordRequest;
 import com.vinorsoft.gpt.service.chat.dto.response.JwtResponse;
 import com.vinorsoft.gpt.service.chat.repository.AccountRepo;
 import com.vinorsoft.gpt.service.chat.security.JwtConfig;
 import com.vinorsoft.gpt.service.chat.security.jwt.JwtUtils;
 import com.vinorsoft.gpt.service.chat.security.services.UserDetailsImpl;
-import com.vinorsoft.gpt.service.chat.services.impl.AccountServiceImpl;
 import com.vinorsoft.gpt.service.chat.services.interfaces.AccountService;
 import com.vinorsoft.gpt.service.chat.services.interfaces.LoginHistoryService;
 
@@ -208,8 +206,18 @@ public class AuthController {
 			throws MailException, UnsupportedEncodingException, MessagingException {
 		ResponseEntity<Object> response = accountService.forgotPassword(emailRequest.getEmail());
 		String temp = response.getBody().toString();
-		String base_url = this.base_url(request.getRequestURL().toString());
-		if (!temp.equals("error")) {
+		//String base_url = this.base_url(request.getRequestURL().toString());
+		String base_url = "http://117.4.247.68:18201/resetpassword/";
+		String result = "";
+		try {
+			Gson gson = new Gson();
+			Map claims = gson.fromJson(temp, Map.class);
+			result = claims.get("data").toString();
+		}
+		catch (Exception e) {
+			result = temp;
+		}
+		if (!result.equals("error")) {
 			String resetPasswordLink = base_url + temp;
 			try {
 				accountService.sendForgotPasswordEmail(emailRequest.getEmail(), resetPasswordLink);
@@ -220,5 +228,20 @@ public class AuthController {
 			return responseFormat.response(HttpServletResponse.SC_OK, null, "Yêu cầu đổi mật khẩu thành công!\nVui lòng kiểm tra email để tiếp tục!");
 		}
 		return response;
+	}
+	
+	
+	@PostMapping("/reset_password")
+	public ResponseEntity<Object> resetPassword(@RequestBody ResetPasswordRequest request) {
+		String password = request.getPassword();
+		String token = request.getToken();
+		if (password == null || password.equals("")) {
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null, "Mật khẩu không hợp lệ!");
+		}
+		if (token == null || token.equals("")) {
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null, "Token không hợp lệ!");
+		}
+
+		return accountService.resetPassword(token, password);
 	}
 }
