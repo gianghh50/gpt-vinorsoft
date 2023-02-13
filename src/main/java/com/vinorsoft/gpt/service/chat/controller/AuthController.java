@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 
 import javax.mail.MessagingException;
 import javax.mail.SendFailedException;
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
 
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.vinorsoft.gpt.service.chat.custom.ResponseFormat;
 import com.vinorsoft.gpt.service.chat.dto.AccountSignUpDto;
 import com.vinorsoft.gpt.service.chat.dto.request.EmailRequest;
 import com.vinorsoft.gpt.service.chat.dto.request.LoginRequest;
@@ -63,6 +65,9 @@ public class AuthController {
 
 	@Autowired
 	AccountService accountService;
+	
+	@Autowired
+	ResponseFormat responseFormat;
 
 	@Autowired
 	JwtUtils jwtUtils;
@@ -147,19 +152,31 @@ public class AuthController {
 		return accountService.validOTP(username, OTP);
 	}
 
+	private String base_url(String url) {
+		int index = 0;
+		int count = 0;
+		while (count < 3) {
+		    index = url.indexOf("/", index + 1);
+		    count++;
+		}
+		return url.substring(0, index + 1);
+	}
+	
 	@PostMapping("/forgot_password")
-	public ResponseEntity<String> forgotPassword(@RequestBody EmailRequest emailRequest)
+	public ResponseEntity<Object> forgotPassword(@RequestBody EmailRequest emailRequest, HttpServletRequest request)
 			throws MailException, UnsupportedEncodingException, MessagingException {
-		ResponseEntity<String> response = accountService.forgotPassword(emailRequest.getEmail());
-		String temp = response.getBody();
-		if (temp != null && !temp.startsWith("Invalid")) {
-			String resetPasswordLink = "http://localhost:10112/auth/reset-pass/" + temp;
+		ResponseEntity<Object> response = accountService.forgotPassword(emailRequest.getEmail());
+		String temp = response.getBody().toString();
+		String base_url = this.base_url(request.getRequestURL().toString());
+		if (!temp.equals("error")) {
+			String resetPasswordLink = base_url + temp;
 			try {
 				accountService.sendForgotPasswordEmail(emailRequest.getEmail(), resetPasswordLink);
 			} catch (SendFailedException e) {
-				return new ResponseEntity<>(e.getCause().toString(), HttpStatus.NOT_FOUND);
+				logger.info("Error when forgot password: " + e.toString());
+				return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null, "Lỗi khi gửi email!");
 			}
-			return new ResponseEntity<>("email sent!", HttpStatus.OK);
+			return responseFormat.response(HttpServletResponse.SC_OK, null, "Yêu cầu đổi mật khẩu thành công!\nVui lòng kiểm tra email để tiếp tục!");
 		}
 		return response;
 	}

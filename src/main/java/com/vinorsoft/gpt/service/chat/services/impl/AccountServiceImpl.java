@@ -72,22 +72,20 @@ public class AccountServiceImpl implements AccountService {
 	ResponseFormat responseFormat;
 
 	@Override
-	public ResponseEntity<String> forgotPassword(String email) {
-//		Optional<Account> accountOptional = Optional.ofNullable(accountRepo.findByEmail(email));
-//
-//		if (!accountOptional.isPresent()) {
-//			return new ResponseEntity<>("Invalid email id.", HttpStatus.UNAUTHORIZED);
-//		}
-//
-//		Account account = accountOptional.get();
-////		account.setResetPassToken(generateToken());
-////		account.setTokenCreationDate(LocalDateTime.now());
-//
-//		account = accountRepo.save(account);
+	public ResponseEntity<Object> forgotPassword(String email) {
+		List<Account> accounts = accountRepo.findByEmail(email);
 
-//		return new ResponseEntity<>(account.getResetPassToken(), HttpStatus.OK);
+		if (accounts.size() == 0) {
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null, "Địa chỉ email không đúng!");
+		}
+		
+		Account account = accounts.get(0);
+		account.setResetPasswordToken(generateToken());
+		account.setResetTokenCreate(new Date());
+		account = accountRepo.save(account);
 
-		return null;
+		return ResponseEntity.badRequest().body(account.getResetPasswordToken());
+
 	}
 
 	private String generateToken() {

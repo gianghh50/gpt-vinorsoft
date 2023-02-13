@@ -61,6 +61,11 @@ public class Account {
 	private Date dateModify;
 	@Column(name="AVATAR")
 	private String avatar;
+	@Column(name="RESET_PASSWORD_TOKEN")
+	private String resetPasswordToken;
+	@Column(name="RESET_TOKEN_CREATE")
+	private Date resetTokenCreate;
+	
 
 }
     

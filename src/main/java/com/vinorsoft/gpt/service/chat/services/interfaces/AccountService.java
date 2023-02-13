@@ -15,7 +15,7 @@ import com.vinorsoft.gpt.service.chat.entity.Account;
 
 public interface AccountService {
 
-    ResponseEntity<String> forgotPassword(String email);
+    ResponseEntity<Object> forgotPassword(String email);
 
     void sendForgotPasswordEmail(String email, String resetPasswordLink) throws MessagingException, UnsupportedEncodingException;
 
