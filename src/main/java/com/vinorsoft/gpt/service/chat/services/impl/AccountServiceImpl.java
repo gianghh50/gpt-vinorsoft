@@ -38,7 +38,9 @@ import com.vinorsoft.gpt.service.chat.dto.AccountInfoDto;
 import com.vinorsoft.gpt.service.chat.dto.AccountSignUpDto;
 import com.vinorsoft.gpt.service.chat.dto.AccountUpdateInforDto;
 import com.vinorsoft.gpt.service.chat.dto.PaginationDto;
+import com.vinorsoft.gpt.service.chat.entity.AcceptedMail;
 import com.vinorsoft.gpt.service.chat.entity.Account;
+import com.vinorsoft.gpt.service.chat.repository.AcceptedMailRepo;
 import com.vinorsoft.gpt.service.chat.repository.AccountRepo;
 import com.vinorsoft.gpt.service.chat.services.interfaces.AccountService;
 
@@ -55,6 +57,9 @@ public class AccountServiceImpl implements AccountService {
 
 	@Autowired
 	private AccountRepo accountRepo;
+
+	@Autowired
+	private AcceptedMailRepo acceptedMailRepo;
 
 	@Autowired
 	private JavaMailSender mailSender;
@@ -158,6 +163,12 @@ public class AccountServiceImpl implements AccountService {
 			return ResponseEntity.ok(response);
 		}
 	}
+	
+	private boolean isVinorsoftMail(String mail) {
+		if(mail.endsWith("@vinorsoft.com"))
+			return true;
+		return false;
+	}
 
 	@Override
 	public ResponseEntity<Object> signUp(AccountSignUpDto signUpDto) {
@@ -171,12 +182,13 @@ public class AccountServiceImpl implements AccountService {
 				accountRepo.delete(account);
 			} else {
 				logger.info("Username " + signUpDto.getUsername() + " đã tồn tại!");
-				return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null,
+				return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "duplicate_username",
 						"Username " + signUpDto.getUsername() + " đã tồn tại!");
 			}
 		} catch (Exception e) {
 		}
 
+		// Kiểm tra email, chấp nhận mail có trong danh sách và mail vinorsoft
 		try {
 			List<Account> accounts = accountRepo.findByEmail(signUpDto.getEmail());
 			if (accounts.size() != 0) {
@@ -185,10 +197,17 @@ public class AccountServiceImpl implements AccountService {
 					accountRepo.delete(accounts.get(0));
 				} else {
 					logger.info("Địa chỉ email " + signUpDto.getEmail() + " đã được sử dụng!");
-					return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null,
+					return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "duplicate_mail",
 							"Địa chỉ email: " + signUpDto.getEmail() + " đã được sử dụng!");
 				}
 			}
+			List<AcceptedMail> mails = acceptedMailRepo.findByEmail(signUpDto.getEmail());
+			if (mails.size() == 0 && !isVinorsoftMail(signUpDto.getEmail())) {
+				logger.info("Địa chỉ email " + signUpDto.getEmail() + " không được đăng ký! \nVui lòng liên hệ bộ phận CSKH của Vinorsoft để được hỗ trợ!");
+				return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "unregisted_mail",
+						"Địa chỉ email " + signUpDto.getEmail() + " không được đăng ký! \nVui lòng liên hệ bộ phận CSKH của Vinorsoft để được hỗ trợ!");
+			}
+
 		} catch (Exception e) {
 		}
 
@@ -235,7 +254,8 @@ public class AccountServiceImpl implements AccountService {
 			mailSender.send(message);
 		} catch (Exception e) {
 			logger.info("Không thể gửi mail. Vui lòng thử lại! Error: " + e.toString());
-			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null, "Không thể gửi mail. Vui lòng thử lại!");
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null,
+					"Không thể gửi mail. Vui lòng thử lại!");
 		}
 
 		logger.info("Tạo tài khoản thành công!");

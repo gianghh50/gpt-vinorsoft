@@ -2,6 +2,7 @@ package com.vinorsoft.gpt.service.chat.security.jwt;
 
 
 import java.util.Date;
+import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -15,7 +16,7 @@ public class JwtUtils {
 
   private String jwtSecret = "JwtSecretKey";
 
-  private int jwtExpirationMs = 86400000;
+  private int jwtExpirationMs = 60*60*1000;
 
   public String generateJwtToken(Authentication authentication) {
     Long now = System.currentTimeMillis();
@@ -29,5 +30,13 @@ public class JwtUtils {
         .signWith(SignatureAlgorithm.HS512, jwtSecret.getBytes())
         .compact();
   }
+  
+  public String doGenerateRefreshToken(Map<String, Object> claims, String subject) {
+
+		return Jwts.builder().setClaims(claims).setSubject(subject).setIssuedAt(new Date(System.currentTimeMillis()))
+				.setExpiration(new Date(System.currentTimeMillis() + 60 * 60 * 1000))
+				.signWith(SignatureAlgorithm.HS512, jwtSecret).compact();
+
+	}
 
 }

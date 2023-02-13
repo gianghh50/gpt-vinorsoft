@@ -5,6 +5,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
 import javax.mail.MessagingException;
@@ -27,6 +28,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,22 +36,27 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.vinorsoft.gpt.service.chat.custom.ResponseFormat;
+import com.google.gson.Gson;
+import com.vinorsoft.gpt.service.chat.custom.TokenUtilities;
 import com.vinorsoft.gpt.service.chat.dto.AccountSignUpDto;
+import com.vinorsoft.gpt.service.chat.dto.RefreshTokenResponse;
 import com.vinorsoft.gpt.service.chat.dto.request.EmailRequest;
 import com.vinorsoft.gpt.service.chat.dto.request.LoginRequest;
 import com.vinorsoft.gpt.service.chat.dto.response.JwtResponse;
 import com.vinorsoft.gpt.service.chat.repository.AccountRepo;
+import com.vinorsoft.gpt.service.chat.security.JwtConfig;
 import com.vinorsoft.gpt.service.chat.security.jwt.JwtUtils;
 import com.vinorsoft.gpt.service.chat.security.services.UserDetailsImpl;
 import com.vinorsoft.gpt.service.chat.services.impl.AccountServiceImpl;
 import com.vinorsoft.gpt.service.chat.services.interfaces.AccountService;
+import com.vinorsoft.gpt.service.chat.services.interfaces.LoginHistoryService;
 
+import io.jsonwebtoken.impl.DefaultClaims;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/api/v1/authentication")
 @Tag(name = "Authentication Controller")
-@CrossOrigin("http://localhost:3000")
 public class AuthController {
 
 	private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
@@ -68,12 +75,20 @@ public class AuthController {
 	
 	@Autowired
 	ResponseFormat responseFormat;
+	
+	@Autowired
+	LoginHistoryService loginHistoryService;
 
 	@Autowired
 	JwtUtils jwtUtils;
+	
+	@Autowired
+	TokenUtilities tokenUtilities;
+	
+	private final JwtConfig jwtConfig = new JwtConfig();
 
 	@PostMapping("/login")
-	public ResponseEntity<Object> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+	public ResponseEntity<Object> authenticateUser(@Valid @RequestBody LoginRequest loginRequest, HttpServletRequest request) {
 
 		Authentication authentication = authenticationManager.authenticate(
 				new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
@@ -108,6 +123,10 @@ public class AuthController {
 
 		String message = "Đăng nhập thành công!";
 		String action = "";
+		
+		String device = request.getHeader("User-Agent");
+		String clientIP = request.getRemoteAddr();
+		
 
 		if (userDetails.getIsActivated() == 0) {
 			Map<String, Object> response = new HashMap<>();
@@ -115,15 +134,22 @@ public class AuthController {
 			response.put("code", HttpServletResponse.SC_FORBIDDEN);
 			response.put("data", "unactive");
 			response.put("message", "Tài khoản chưa được kích hoạt!");
+			
+			loginHistoryService.save(userDetails.getUsername(), device, clientIP, "Account inactivated", new Date());
+			
 			return ResponseEntity.ok(response);
 		}
 
 		if (userDetails.getIsActivated() == 1
-				&& (new Date(userDetails.getDateCreate().getTime() + 7 * 24 * 60 * 60 * 1000)).after(new Date())) {
+				&& (new Date(userDetails.getDateCreate().getTime() + 7 * 24 * 60 * 60 * 1000)).before(new Date())) {
 			logger.info("Bạn cần cập nhật thông tin tài khoản để tiếp tục sử dụng dịch vụ!");
 			action = "update_infor";
 			message = "Bạn cần cập nhật thông tin tài khoản để tiếp tục sử dụng dịch vụ!";
+			
+			loginHistoryService.save(userDetails.getUsername(), device, clientIP, "Missing Information", new Date());
 		}
+		
+		loginHistoryService.save(userDetails.getUsername(), device, clientIP, "Login Success", new Date());
 
 		return ResponseEntity.ok().headers(responseHeaders)
 				.body(new JwtResponse(jwt, userDetails.getId(), userDetails.getUsername(), userDetails.getEmail(),
@@ -134,7 +160,22 @@ public class AuthController {
 	public ResponseEntity<Object> signUp(@Valid @RequestBody AccountSignUpDto dto) {
 		return accountService.signUp(dto);
 	}
+	
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	@GetMapping("/refreshtoken")
+	public ResponseEntity<?> refreshtoken(HttpServletRequest request) throws Exception {
+		Map claims = tokenUtilities.getClaimsProperty(request);
+		String new_token = jwtUtils.doGenerateRefreshToken(claims, claims.get("sub").toString());
+		return ResponseEntity.ok(new RefreshTokenResponse(new_token));
+	}
 
+	public Map<String, Object> getMapFromIoJsonwebtokenClaims(DefaultClaims claims) {
+		Map<String, Object> expectedMap = new HashMap<String, Object>();
+		for (Entry<String, Object> entry : claims.entrySet()) {
+			expectedMap.put(entry.getKey(), entry.getValue());
+		}
+		return expectedMap;
+	}
 	@PostMapping("/logout")
 	public ResponseEntity<Object> logOut() {
 		Map<String, Object> response = new HashMap<>();
