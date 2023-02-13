@@ -3,6 +3,9 @@ package com.vinorsoft.gpt.service.chat.controller;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -13,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.vinorsoft.gpt.service.chat.custom.ResponseFormat;
+import com.vinorsoft.gpt.service.chat.custom.TokenUtilities;
 import com.vinorsoft.gpt.service.chat.dto.AccountInfoDto;
 import com.vinorsoft.gpt.service.chat.dto.AccountUpdateInforDto;
 import com.vinorsoft.gpt.service.chat.dto.PaginationDto;
@@ -25,14 +30,19 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 @SecurityRequirement(name = "bearerAuth")
 public class AccountController {
 
-	
 	@Autowired
 	AccountService accountService;
-	
+
+	@Autowired
+	TokenUtilities tokenUtilities;
+
+	@Autowired
+	ResponseFormat responseFormat;
+
 	@GetMapping("/accounts")
 	public ResponseEntity<Map<String, Object>> getAccounts(
 			@RequestParam(name = "page", required = false, defaultValue = "1") Integer page,
-			@RequestParam(name = "limit", required = false, defaultValue = "10") Integer limit){
+			@RequestParam(name = "limit", required = false, defaultValue = "10") Integer limit) {
 		PaginationDto listResult = accountService.getAccounts(page, limit);
 		Map<String, Object> response = new HashMap<>();
 		response.put("page", page);
@@ -41,25 +51,27 @@ public class AccountController {
 		response.put("total", listResult.getTotalElements());
 		return ResponseEntity.ok(response);
 	}
-	
+
 	@GetMapping("/account")
-	public ResponseEntity<Object> getAccount(@RequestParam(name = "username", required = true) String username){
+	public ResponseEntity<Object> getAccount(@RequestParam(name = "username", required = true) String username,
+			HttpServletRequest request) {
+		if (!tokenUtilities.IsAuthorizeUser(username, request))
+			return responseFormat.unauthorizedResponse(null, "Bạn không có quyền truy cập !");
 		return accountService.findAccount(username);
 	}
-	
+
 	@PutMapping("/account")
-	public ResponseEntity<Object> updateInforAccount(@RequestBody AccountUpdateInforDto dto){
+	public ResponseEntity<Object> updateInforAccount(@RequestBody AccountUpdateInforDto dto,
+			HttpServletRequest request) {
+		if (!tokenUtilities.IsAuthorizeUser(dto.getUsername(), request))
+			return responseFormat.unauthorizedResponse(null, "Bạn không có quyền truy cập !");
 		return accountService.updateInfo(dto);
 	}
-	
+
 	@PutMapping("/account/status")
-	public ResponseEntity<Object> updateAccountStatus(
-			@RequestParam(name = "username", required = true) String username,
-			@RequestParam(name = "status", required = true) Integer status){
+	public ResponseEntity<Object> updateAccountStatus(@RequestParam(name = "username", required = true) String username,
+			@RequestParam(name = "status", required = true) Integer status) {
 		return accountService.updateStatus(username, status);
 	}
-	
-	
-	
-	
+
 }

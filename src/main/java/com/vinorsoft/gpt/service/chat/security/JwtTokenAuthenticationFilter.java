@@ -116,14 +116,20 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
 
 	@SuppressWarnings("rawtypes")
 	private Map getClaims(String token) {
-		String[] split_string = token.split("\\.");
-		String base64EncodedBody = split_string[1];
-		org.apache.commons.codec.binary.Base64 base64Url = new org.apache.commons.codec.binary.Base64(true);
-		String body = new String(base64Url.decode(base64EncodedBody));
-		// Convert to HashMap
-		Gson gson = new Gson();
-		Map claims = gson.fromJson(body, Map.class);
-		return claims;
+		try {
+			String[] split_string = token.split("\\.");
+			String base64EncodedBody = split_string[1];
+			org.apache.commons.codec.binary.Base64 base64Url = new org.apache.commons.codec.binary.Base64(true);
+			String body = new String(base64Url.decode(base64EncodedBody));
+			// Convert to HashMap
+			Gson gson = new Gson();
+			Map claims = gson.fromJson(body, Map.class);
+			return claims;
+		}
+		catch (Exception e) {
+			logger.info("Get Claims error: " + e.toString());
+			return null;
+		}
 	}
 
 	private boolean isTokenExpired(String token) {

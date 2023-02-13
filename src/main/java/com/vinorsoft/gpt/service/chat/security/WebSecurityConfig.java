@@ -1,12 +1,12 @@
 package com.vinorsoft.gpt.service.chat.security;
 
-
 import java.util.ArrayList;
 import java.util.Arrays;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -25,51 +25,57 @@ import com.vinorsoft.gpt.service.chat.security.jwt.AuthEntryPointJwt;
 @Configuration
 @EnableWebSecurity
 public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
-  @Autowired
-  UserDetailsService userDetailsService;
+	@Autowired
+	UserDetailsService userDetailsService;
 
-  @Autowired
-  private AuthEntryPointJwt unauthorizedHandler;
-  
-  @Autowired
+	@Autowired
+	private AuthEntryPointJwt unauthorizedHandler;
+
+	@Autowired
 	private JwtConfig jwtConfig;
 
-  @Override
-  public void configure(AuthenticationManagerBuilder authenticationManagerBuilder) throws Exception {
-    authenticationManagerBuilder.userDetailsService(userDetailsService).passwordEncoder(passwordEncoder());
-  }
+	final private String admin = "admin";
+	final private String user = "user";
 
-  @Bean
-  @Override
-  public AuthenticationManager authenticationManagerBean() throws Exception {
-    return super.authenticationManagerBean();
-  }
+	@Override
+	public void configure(AuthenticationManagerBuilder authenticationManagerBuilder) throws Exception {
+		authenticationManagerBuilder.userDetailsService(userDetailsService).passwordEncoder(passwordEncoder());
+	}
 
-  @Bean
-  public BCryptPasswordEncoder passwordEncoder() {
-    return new BCryptPasswordEncoder();
-  }
+	@Bean
+	@Override
+	public AuthenticationManager authenticationManagerBean() throws Exception {
+		return super.authenticationManagerBean();
+	}
 
-  @Override
-  protected void configure(HttpSecurity http) throws Exception {
-    http.cors().and().csrf().disable()
-      .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
-      .exceptionHandling().authenticationEntryPoint(unauthorizedHandler).and().addFilterAfter(new JwtTokenAuthenticationFilter(jwtConfig), UsernamePasswordAuthenticationFilter.class)
-      .authorizeRequests().antMatchers("/api/v1/authentication/**").permitAll()
-      .antMatchers("/swagger-ui/**","/v3/api-docs/**").permitAll()
-      .anyRequest().authenticated();
+	@Bean
+	public BCryptPasswordEncoder passwordEncoder() {
+		return new BCryptPasswordEncoder();
+	}
 
-  }
-  
-  @Bean
-  public CorsConfigurationSource corsConfigurationSource() {
-      CorsConfiguration configuration = new CorsConfiguration();
-      configuration.setAllowedOriginPatterns(Arrays.asList("*"));
-      configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-      configuration.setAllowedHeaders(Arrays.asList("authorization", "content-type", "x-auth-token"));
-      configuration.setExposedHeaders(Arrays.asList("x-auth-token"));
-      UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-      source.registerCorsConfiguration("/**", configuration);
-      return source;
-  }
+	@Override
+	protected void configure(HttpSecurity http) throws Exception {
+		http.cors().and().csrf().disable().sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+				.and().exceptionHandling().authenticationEntryPoint(unauthorizedHandler).and()
+				.addFilterAfter(new JwtTokenAuthenticationFilter(jwtConfig), UsernamePasswordAuthenticationFilter.class)
+				.authorizeRequests().antMatchers("/api/v1/authentication/**").permitAll()
+				.antMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+				//Account
+				.antMatchers(HttpMethod.GET, "/api/v1/accounts/**").hasRole(admin)
+				.antMatchers(HttpMethod.PUT, "/api/v1/account/status/**").hasRole(admin)
+				.anyRequest().authenticated();
+
+	}
+
+	@Bean
+	public CorsConfigurationSource corsConfigurationSource() {
+		CorsConfiguration configuration = new CorsConfiguration();
+		configuration.setAllowedOriginPatterns(Arrays.asList("*"));
+		configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+		configuration.setAllowedHeaders(Arrays.asList("authorization", "content-type", "x-auth-token"));
+		configuration.setExposedHeaders(Arrays.asList("x-auth-token"));
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", configuration);
+		return source;
+	}
 }

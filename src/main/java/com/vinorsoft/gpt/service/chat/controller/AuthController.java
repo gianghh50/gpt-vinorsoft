@@ -36,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.google.gson.Gson;
+import com.vinorsoft.gpt.service.chat.custom.TokenUtilities;
 import com.vinorsoft.gpt.service.chat.dto.AccountSignUpDto;
 import com.vinorsoft.gpt.service.chat.dto.RefreshTokenResponse;
 import com.vinorsoft.gpt.service.chat.dto.request.EmailRequest;
@@ -76,6 +77,9 @@ public class AuthController {
 
 	@Autowired
 	JwtUtils jwtUtils;
+	
+	@Autowired
+	TokenUtilities tokenUtilities;
 	
 	private final JwtConfig jwtConfig = new JwtConfig();
 
@@ -153,19 +157,10 @@ public class AuthController {
 		return accountService.signUp(dto);
 	}
 	
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	@GetMapping("/refreshtoken")
 	public ResponseEntity<?> refreshtoken(HttpServletRequest request) throws Exception {
-		// From the HttpRequest get the claims
-//		DefaultClaims claims = (io.jsonwebtoken.impl.DefaultClaims) request.getAttribute("claims");
-		String header = request.getHeader("Authorization");
-		String token = header.replace("Bearer", "");
-		String[] split_string = token.split("\\.");
-		String base64EncodedBody = split_string[1];
-		org.apache.commons.codec.binary.Base64 base64Url = new org.apache.commons.codec.binary.Base64(true);
-		String body = new String(base64Url.decode(base64EncodedBody));
-		// Convert to HashMap
-		Gson gson = new Gson();
-		Map claims = gson.fromJson(body, Map.class);
+		Map claims = tokenUtilities.getClaimsProperty(request);
 		String new_token = jwtUtils.doGenerateRefreshToken(claims, claims.get("sub").toString());
 		return ResponseEntity.ok(new RefreshTokenResponse(new_token));
 	}
@@ -194,20 +189,20 @@ public class AuthController {
 		return accountService.validOTP(username, OTP);
 	}
 
-	@PostMapping("/forgot_password")
-	public ResponseEntity<String> forgotPassword(@RequestBody EmailRequest emailRequest)
-			throws MailException, UnsupportedEncodingException, MessagingException {
-		ResponseEntity<String> response = accountService.forgotPassword(emailRequest.getEmail());
-		String temp = response.getBody();
-		if (temp != null && !temp.startsWith("Invalid")) {
-			String resetPasswordLink = "http://localhost:10112/auth/reset-pass/" + temp;
-			try {
-				accountService.sendForgotPasswordEmail(emailRequest.getEmail(), resetPasswordLink);
-			} catch (SendFailedException e) {
-				return new ResponseEntity<>(e.getCause().toString(), HttpStatus.NOT_FOUND);
-			}
-			return new ResponseEntity<>("email sent!", HttpStatus.OK);
-		}
-		return response;
-	}
+//	@PostMapping("/forgot_password")
+//	public ResponseEntity<String> forgotPassword(@RequestBody EmailRequest emailRequest)
+//			throws MailException, UnsupportedEncodingException, MessagingException {
+//		ResponseEntity<String> response = accountService.forgotPassword(emailRequest.getEmail());
+//		String temp = response.getBody();
+//		if (temp != null && !temp.startsWith("Invalid")) {
+//			String resetPasswordLink = "http://localhost:10112/auth/reset-pass/" + temp;
+//			try {
+//				accountService.sendForgotPasswordEmail(emailRequest.getEmail(), resetPasswordLink);
+//			} catch (SendFailedException e) {
+//				return new ResponseEntity<>(e.getCause().toString(), HttpStatus.NOT_FOUND);
+//			}
+//			return new ResponseEntity<>("email sent!", HttpStatus.OK);
+//		}
+//		return response;
+//	}
 }

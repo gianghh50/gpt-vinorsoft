@@ -1,5 +1,6 @@
 package com.vinorsoft.gpt.service.chat.services.impl;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
@@ -84,10 +85,12 @@ public class MessageServiceImpl implements MessageService {
 					GPTResponseDto.class);
 
 			result = rp.getBody();
+			String reply = result.getReply().replaceAll("\n", "<br>").strip();
+			result.setReply(reply);
 		} catch (Exception e) {
 			logger.info("Lỗi request đến GPT API! : " + e.toString());
 			response.put("code", HttpServletResponse.SC_BAD_REQUEST);
-			response.put("data", null);
+			response.put("data", "Error getting response!");
 			response.put("message", "Lỗi request đến GPT API! ");
 			messageRepo.delete(message);
 			return ResponseEntity.ok(response);
@@ -109,11 +112,15 @@ public class MessageServiceImpl implements MessageService {
 			return ResponseEntity.ok(response);
 		}
 
-		// Khi hội thoại 6, hoặc 7 câu thì đặt title
+		// Khi hội thoại 6, hoặc 7 câu hoặc có > 120 words thì đặt title
 
 		List<Message> longMessage = this.getMessageByConversationId(dto.getConversationId());
 		Integer size = longMessage.size();
-		if (size > 5 && size < 8) {
+		String longMessageContent = "";
+		for(Message item : longMessage) {
+			longMessageContent += item.getContent() + ";";
+		}
+		if ((size > 5 && size < 8) || longMessageContent.length() > 120) {
 			String updateTitle = conversationService.updateTitle(dto.getConversationId());
 			logger.info(updateTitle);
 		}

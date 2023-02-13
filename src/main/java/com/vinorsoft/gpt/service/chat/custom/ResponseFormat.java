@@ -5,6 +5,7 @@ import java.util.Map;
 
 import javax.servlet.http.HttpServletResponse;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
@@ -17,5 +18,13 @@ public class ResponseFormat {
 		response.put("data", data);
 		response.put("message", message);
 		return ResponseEntity.ok(response); 
+	}
+	
+	public ResponseEntity<Object> unauthorizedResponse(Object data, String message){
+		Map<String,Object> response = new HashMap<>();
+		response.put("code", HttpServletResponse.SC_UNAUTHORIZED);
+		response.put("data", data);
+		response.put("message", message);
+		return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response); 
 	}
 }
