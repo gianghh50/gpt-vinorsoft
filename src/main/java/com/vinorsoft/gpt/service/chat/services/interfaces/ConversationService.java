@@ -18,4 +18,6 @@ public interface ConversationService {
 	ResponseEntity<Object> delete(String id);
 	
 	ResponseEntity<Object> getById(String id);
+	
+	Integer deleteBlankConversation(String username);
 }

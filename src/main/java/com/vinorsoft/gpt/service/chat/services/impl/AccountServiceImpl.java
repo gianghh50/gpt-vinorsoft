@@ -8,6 +8,7 @@ import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -38,8 +39,10 @@ import com.vinorsoft.gpt.service.chat.dto.AccountInfoDto;
 import com.vinorsoft.gpt.service.chat.dto.AccountSignUpDto;
 import com.vinorsoft.gpt.service.chat.dto.AccountUpdateInforDto;
 import com.vinorsoft.gpt.service.chat.dto.PaginationDto;
+import com.vinorsoft.gpt.service.chat.dto.StatisticDto;
 import com.vinorsoft.gpt.service.chat.entity.AcceptedMail;
 import com.vinorsoft.gpt.service.chat.entity.Account;
+import com.vinorsoft.gpt.service.chat.entity.LoginHistory;
 import com.vinorsoft.gpt.service.chat.repository.AcceptedMailRepo;
 import com.vinorsoft.gpt.service.chat.repository.AccountRepo;
 import com.vinorsoft.gpt.service.chat.services.interfaces.AccountService;
@@ -53,7 +56,7 @@ public class AccountServiceImpl implements AccountService {
 
 	public final Integer MAX_FAILED_ATTEMPTS = 5;
 
-	private static final long LOCK_TIME_DURATION = 10 * 60 * 1000;
+	private static final long RESET_PASSWORD_DURATION = 10 * 60 * 1000;
 
 	@Autowired
 	private AccountRepo accountRepo;
@@ -81,12 +84,12 @@ public class AccountServiceImpl implements AccountService {
 		List<Account> accounts = accountRepo.findByEmail(email);
 
 		if (accounts.size() == 0) {
-			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null, "Địa chỉ email không đúng!");
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "error", "Địa chỉ email không đúng!");
 		}
 		
 		Account account = accounts.get(0);
 		account.setResetPasswordToken(generateToken());
-		account.setResetTokenCreate(new Date());
+		account.setResetTokenCreate(new Date(System.currentTimeMillis()));
 		account = accountRepo.save(account);
 
 		return ResponseEntity.badRequest().body(account.getResetPasswordToken());
@@ -105,15 +108,15 @@ public class AccountServiceImpl implements AccountService {
 		MimeMessage message = mailSender.createMimeMessage();
 		MimeMessageHelper helper = new MimeMessageHelper(message);
 
-		helper.setFrom("vinorsoft@gmail.com", "Vinorsoft Support");
+		helper.setFrom("chatgpt@vinorsoft.com", "Chat GPT Vinorsoft Support");
 		helper.setTo(email);
 
-		String subject = "Here's the link to reset your password";
+		String subject = "Xác nhận yêu cầu đổi mật khẩu";
 
-		String content = "<p>Hello,</p>" + "<p>You have requested to reset your password.</p>"
-				+ "<p>Click the link below to change your password:</p>" + "<p><a href=\"" + resetPasswordLink
-				+ "\">Change my password</a></p>" + "<br>" + "<p>Ignore this email if you do remember your password, "
-				+ "or you have not made the request.</p>";
+		String content = "<p>Xin chào,</p>" + "<p>Chúng tôi nhận được yêu cầu đổi mật khẩu của bạn.</p>"
+				+ "<p>Vui lòng nhấn vào dường link dưới đây để cập nhật mật khẩu của bạn:</p>" + "<p><a href=\"" + resetPasswordLink
+				+ "\">Yêu cầu đổi mật khẩu</a></p>" + "<br>" + "<p>Yêu cầu này có hiệu lực trong 10 phút. Bỏ qua email này nếu bạn đã nhớ mật khẩu "
+				+ "hoặc bạn không phải là người thực hiện yêu cầu này! Trân trọng.</p>";
 
 		helper.setSubject(subject);
 
@@ -123,29 +126,31 @@ public class AccountServiceImpl implements AccountService {
 	}
 
 	@Override
-	public ResponseEntity<String> resetPassword(String token, String password) {
-//		Optional<Account> accountOptional = Optional.ofNullable(accountRepo.findByResetPassToken(token));
-//
-//		if (!accountOptional.isPresent()) {
-//			return new ResponseEntity<>("Invalid email id.", HttpStatus.UNAUTHORIZED);
-//		}
-//
-//		LocalDateTime tokenCreationDate = accountOptional.get().getTokenCreationDate();
-//
-//		if (isTokenExpired(tokenCreationDate)) {
-//			return new ResponseEntity<>("Token expired.", HttpStatus.NOT_FOUND);
-//
-//		}
-//
-//		Account account = accountOptional.get();
-//
-//		account.setPassword(password);
-//		account.setResetPassToken(null);
-//		account.setTokenCreationDate(null);
-//
-//		accountRepo.save(account);
+	public ResponseEntity<Object> resetPassword(String token, String password) {
+		List<Account> accounts = accountRepo.findByResetPasswordToken(token);
 
-		return new ResponseEntity<>("Your password successfully updated.", HttpStatus.OK);
+		if (accounts.size() == 0) {
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "error", "Mã không hợp lệ!");
+		}
+
+		Account account = accounts.get(0);
+
+		if (new Date(account.getResetTokenCreate().getTime() + RESET_PASSWORD_DURATION).before(new Date())) {
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "error", "Đã quá hạn yêu cầu! Vui lòng thực hiện lại!");
+
+		}
+
+		account.setPassword(password);
+		account.setResetPasswordToken(null);
+		account.setResetTokenCreate(null);
+
+		try {
+			accountRepo.save(account);
+		} catch (Exception e) {
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "error", "Lỗi khi lưu mật khẩu mới. Vui long thử lại!");
+		}
+
+		return responseFormat.response(HttpServletResponse.SC_OK, null, "Thay đổi mật khẩu thành công!");
 	}
 
 	@Override
@@ -379,6 +384,30 @@ public class AccountServiceImpl implements AccountService {
 		logger.info("Cập nhật trạng thái thành công!");
 		return responseFormat.response(HttpServletResponse.SC_OK, null, "Cập nhật trạng thái thành công!");
 	}
+	
+	@Override
+	public ResponseEntity<Object> updateRole(String username, String role) {
+
+		ResponseEntity<Object> accountRes = findByUsername(username);
+		Account account;
+		try {
+			account = (Account) accountRes.getBody();
+		} catch (Exception e) {
+			return accountRes;
+		}
+
+		account.setRole(role);
+		account.setDateModify(new Date());
+
+		try {
+			accountRepo.save(account);
+		} catch (Exception e) {
+			logger.info("Account role update error: " + e.toString());
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null, "Lỗi khi cập nhật vai trò người dùng!");
+		}
+		logger.info("Account role updated!");
+		return responseFormat.response(HttpServletResponse.SC_OK, null, "Cập nhật vai trò thành công!");
+	}
 
 	@Override
 	public ResponseEntity<Object> findAccount(String username) {
@@ -393,4 +422,114 @@ public class AccountServiceImpl implements AccountService {
 		return ResponseEntity.ok(accountInforConverter.toDto(account));
 	}
 
+	@Override
+	public ResponseEntity<Object> updatePassword(String username, String password) {
+		ResponseEntity<Object> accountRes = findByUsername(username);
+		Account account;
+		try {
+			account = (Account) accountRes.getBody();
+		} catch (Exception e) {
+			return accountRes;
+		}
+		account.setPassword(password);
+		account.setDateModify(new Date());
+		try {
+			accountRepo.save(account);
+		} catch (Exception e) {
+			logger.info("Account change password error: " + e.toString());
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null,
+					"Account change password error: " + e.toString());
+		}
+		logger.info("Tài khoản " + username + " thay đổi mật khẩu thành công!");
+		return responseFormat.response(HttpServletResponse.SC_OK, accountInforConverter.toDto(account),
+				"Thay đổi mật khẩu thành công!");
+		
+	}
+
+	@Override
+	public ResponseEntity<Object> quickSignUp(AccountSignUpDto signUpDto) {
+		Map<String, Object> response = new HashMap<>();
+		ResponseEntity<Object> accountRes = findByUsername(signUpDto.getUsername());
+		try {
+			Account account = (Account) accountRes.getBody();
+
+			if (account.getIsActivated() == 0) {
+				accountRepo.delete(account);
+			} else {
+				logger.info("Username " + signUpDto.getUsername() + " đã tồn tại!");
+				return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "duplicate_username",
+						"Username " + signUpDto.getUsername() + " đã tồn tại!");
+			}
+		} catch (Exception e) {
+		}
+
+		// Kiểm tra email, chấp nhận mail có trong danh sách và mail vinorsoft
+		try {
+			List<Account> accounts = accountRepo.findByEmail(signUpDto.getEmail());
+			if (accounts.size() != 0) {
+
+				if (accounts.get(0).getIsActivated() == 0) {
+					accountRepo.delete(accounts.get(0));
+				} else {
+					logger.info("Địa chỉ email " + signUpDto.getEmail() + " đã được sử dụng!");
+					return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "duplicate_mail",
+							"Địa chỉ email: " + signUpDto.getEmail() + " đã được sử dụng!");
+				}
+			}
+		} catch (Exception e) {
+		}
+
+		Account account = new Account();
+		account.setUsername(signUpDto.getUsername());
+		account.setPassword(signUpDto.getPassword());
+		account.setEmail(signUpDto.getEmail());
+		account.setPhoneNumber(signUpDto.getPhoneNumber());
+		account.setIsActivated(2);
+		account.setRole("user");
+		account.setDateCreate(new Date());
+
+		try {
+			accountRepo.save(account);
+		} catch (Exception ex) {
+			logger.info(ex.toString());
+			logger.info("Lỗi khi tạo tài khoản !");
+			response.put("code", HttpServletResponse.SC_BAD_REQUEST);
+			response.put("data", null);
+			response.put("message", "Lỗi khi tạo tài khoản !");
+			return ResponseEntity.ok(response);
+		}
+		logger.info("Tạo tài khoản thành công!");
+		response.put("code", HttpServletResponse.SC_OK);
+		response.put("data", null);
+		response.put("message", "Tạo tài khoản thành công!");
+		return responseFormat.response(HttpServletResponse.SC_OK, null, "Tạo tài khoản thành công!");
+	}
+
+	@Override
+	@SuppressWarnings("deprecation")
+	public List<StatisticDto> AccountStatistic(Integer months) {
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTime(new Date());
+		calendar.add(Calendar.MONTH, -months);
+		calendar.set(Calendar.DAY_OF_MONTH, 1);
+		Date start_date = calendar.getTime();
+		List<StatisticDto> result = new ArrayList<>();
+		for(Integer i = months - 1; i >= 0; i--) {
+			calendar.setTime(new Date());
+			calendar.add(Calendar.MONTH, - i);
+			result.add(new StatisticDto(calendar.getTime(), 0));
+		}
+		List<Account> accounts = accountRepo.getAccounts(start_date, new Date());
+		for(Account account:accounts) {
+			for(StatisticDto item: result) {
+				if(item.getDate().getMonth() == account.getDateCreate().getMonth() && item.getDate().getYear() == account.getDateCreate().getYear()) {
+					item.setCount(item.getCount() + 1);
+					break;
+				}
+			}
+		}
+		
+		
+		return result;
+	}
 }

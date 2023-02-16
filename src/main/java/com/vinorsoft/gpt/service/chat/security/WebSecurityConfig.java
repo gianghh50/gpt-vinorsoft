@@ -35,6 +35,7 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
 	private JwtConfig jwtConfig;
 
 	final private String admin = "admin";
+	final private String moderator = "moderator";
 	final private String user = "user";
 
 	@Override
@@ -62,7 +63,12 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
 				.antMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 				//Account
 				.antMatchers(HttpMethod.GET, "/api/v1/accounts/**").hasRole(admin)
+				.antMatchers(HttpMethod.GET, "/api/v1/histories/**").hasRole(admin)
+				.antMatchers(HttpMethod.PUT, "/api/v1/account/role/**").hasRole(admin)
 				.antMatchers(HttpMethod.PUT, "/api/v1/account/status/**").hasRole(admin)
+				.antMatchers(HttpMethod.POST, "/api/v1/account/quick_sign_up").hasRole(admin)
+				.antMatchers(HttpMethod.GET, "/api/v1/account/statistic/**").hasRole(admin)
+				.antMatchers(HttpMethod.GET, "/api/v1/histories/statistic/**").hasRole(admin)
 				.anyRequest().authenticated();
 
 	}

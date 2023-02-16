@@ -27,7 +27,9 @@ import com.vinorsoft.gpt.service.chat.dto.GPTResponseDto;
 import com.vinorsoft.gpt.service.chat.dto.MessageDto;
 import com.vinorsoft.gpt.service.chat.dto.PaginationDto;
 import com.vinorsoft.gpt.service.chat.entity.Message;
+import com.vinorsoft.gpt.service.chat.repository.ApiKeyRepo;
 import com.vinorsoft.gpt.service.chat.repository.MessageRepo;
+import com.vinorsoft.gpt.service.chat.services.interfaces.ApiKeyService;
 import com.vinorsoft.gpt.service.chat.services.interfaces.ConversationService;
 import com.vinorsoft.gpt.service.chat.services.interfaces.MessageService;
 
@@ -50,13 +52,16 @@ public class MessageServiceImpl implements MessageService {
 	@Autowired
 	ConversationService conversationService;
 
+	@Autowired
+	ApiKeyService apiKeyService;
+
 	@Override
 	public ResponseEntity<Object> save(MessageDto dto) {
 
 		Map<String, Object> response = new HashMap<>();
 
 		// Lấy reply từ GPT
-		GPTResponseDto result;
+		GPTResponseDto result = new GPTResponseDto();
 
 		// Lưu message người dùng gửi lên
 		Message message;
@@ -71,30 +76,42 @@ public class MessageServiceImpl implements MessageService {
 			response.put("message", "Lỗi khi lưu tin nhắn user! ");
 			return ResponseEntity.ok(response);
 		}
-		try {
-			HttpHeaders headers = new HttpHeaders();
-			headers.setContentType(MediaType.APPLICATION_JSON);
+		boolean success = false;
+		Integer count = 3;
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_JSON);
 
-			Map<String, Object> requestJson = new HashMap<>();
-			requestJson.put("userid", 1);
-			requestJson.put("message", dto.getContent());
-			HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestJson, headers);
+		Map<String, Object> requestJson = new HashMap<>();
+		requestJson.put("key", apiKeyService.getRandom().getKey());
+		requestJson.put("message", dto.getContent());
+		HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestJson, headers);
+		String url = "http://localhost:3000/v1/send_message";
+		do {
+			try {
+				ResponseEntity<GPTResponseDto> rp = restTemplate.exchange(url, HttpMethod.POST, request,
+						GPTResponseDto.class);
 
-			String url = "http://localhost:3000/v1/send_message";
-			ResponseEntity<GPTResponseDto> rp = restTemplate.exchange(url, HttpMethod.POST, request,
-					GPTResponseDto.class);
-
-			result = rp.getBody();
-			String reply = result.getReply().replaceAll("\n", "<br>").strip();
-			result.setReply(reply);
-		} catch (Exception e) {
-			logger.info("Lỗi request đến GPT API! : " + e.toString());
-			response.put("code", HttpServletResponse.SC_BAD_REQUEST);
-			response.put("data", "Error getting response!");
-			response.put("message", "Lỗi request đến GPT API! ");
-			messageRepo.delete(message);
-			return ResponseEntity.ok(response);
-		}
+				result = rp.getBody();
+				String reply = result.getReply().trim();
+				if(reply.startsWith("\n"))
+					reply = reply.substring(1, reply.length());
+				result.setReply(reply);
+				break;
+			} catch (Exception e) {
+				success = false;
+			}
+			count = count - 1;
+			if (count == 0) {
+				logger.info("Lỗi request đến GPT API!");
+				response.put("code", HttpServletResponse.SC_BAD_REQUEST);
+				response.put("data", "Error getting response!");
+				response.put("message", "Lỗi request đến GPT API! ");
+				messageRepo.delete(message);
+				return ResponseEntity.ok(response);
+			}
+		} while (!success);
+		
+		
 		// Lưu tin nhắn GPT
 		Message messageGPT;
 		try {
@@ -117,15 +134,23 @@ public class MessageServiceImpl implements MessageService {
 		List<Message> longMessage = this.getMessageByConversationId(dto.getConversationId());
 		Integer size = longMessage.size();
 		String longMessageContent = "";
-		for(Message item : longMessage) {
+		String updateTitle = "";
+		for (Message item : longMessage) {
 			longMessageContent += item.getContent() + ";";
 		}
-		if ((size > 5 && size < 8) || longMessageContent.length() > 120) {
-			String updateTitle = conversationService.updateTitle(dto.getConversationId());
+		if ((size > 5) || longMessageContent.length() > 120) {
+			updateTitle = conversationService.updateTitle(dto.getConversationId());
 			logger.info(updateTitle);
 		}
 
-		return ResponseEntity.ok(messageConverter.toDto(messageGPT));
+		if (updateTitle.equals("This conversation had updated title!"))
+			updateTitle = "";
+
+		response.put("code", HttpServletResponse.SC_OK);
+		response.put("data", messageConverter.toDto(messageGPT));
+		response.put("title_change", updateTitle);
+
+		return ResponseEntity.ok(response);
 	}
 
 	@Override

@@ -10,7 +10,6 @@ public class ConversationConverter {
 
 	public Conversation toEntity(ConversationDto dto) {
 		Conversation entity = new Conversation();
-		entity.setTitle(dto.getTitle());
 		entity.setUsername(dto.getUsername());
 		return entity;
 	}
