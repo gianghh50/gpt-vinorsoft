@@ -43,10 +43,12 @@ import com.vinorsoft.gpt.service.chat.dto.request.LoginRequest;
 import com.vinorsoft.gpt.service.chat.dto.request.ResetPasswordRequest;
 import com.vinorsoft.gpt.service.chat.dto.response.JwtResponse;
 import com.vinorsoft.gpt.service.chat.repository.AccountRepo;
+import com.vinorsoft.gpt.service.chat.repository.ConversationRepo;
 import com.vinorsoft.gpt.service.chat.security.JwtConfig;
 import com.vinorsoft.gpt.service.chat.security.jwt.JwtUtils;
 import com.vinorsoft.gpt.service.chat.security.services.UserDetailsImpl;
 import com.vinorsoft.gpt.service.chat.services.interfaces.AccountService;
+import com.vinorsoft.gpt.service.chat.services.interfaces.ConversationService;
 import com.vinorsoft.gpt.service.chat.services.interfaces.LoginHistoryService;
 
 import io.jsonwebtoken.impl.DefaultClaims;
@@ -73,6 +75,9 @@ public class AuthController {
 	
 	@Autowired
 	ResponseFormat responseFormat;
+	
+	@Autowired
+	ConversationService conversationService;
 	
 	@Autowired
 	LoginHistoryService loginHistoryService;
@@ -149,6 +154,8 @@ public class AuthController {
 		
 		loginHistoryService.save(userDetails.getUsername(), device, clientIP, "Login Success", new Date());
 
+		logger.info("Delete " + conversationService.deleteBlankConversation(userDetails.getUsername()) + " blank conversation!");
+		
 		return ResponseEntity.ok().headers(responseHeaders)
 				.body(new JwtResponse(jwt, userDetails.getId(), userDetails.getUsername(), userDetails.getEmail(),
 						userDetails.getAvatar(), userDetails.getIsActivated(), message, action, roles));

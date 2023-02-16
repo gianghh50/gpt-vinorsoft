@@ -1,5 +1,6 @@
 package com.vinorsoft.gpt.service.chat.repository;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,4 +23,7 @@ public interface AccountRepo extends JpaRepository<Account, Integer>{
     Boolean existsByUsername(String username);
 
     Boolean existsByEmail(String email);
+    
+    @Query("select a from Account a where (a.dateCreate BETWEEN :start AND :end) order by a.dateCreate")
+	List<Account> getAccounts(@Param("start") Date start, @Param("end") Date end);
 }

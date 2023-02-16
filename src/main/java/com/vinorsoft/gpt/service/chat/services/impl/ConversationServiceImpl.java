@@ -4,6 +4,7 @@ import java.text.SimpleDateFormat;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,6 +35,7 @@ import com.vinorsoft.gpt.service.chat.entity.Conversation;
 import com.vinorsoft.gpt.service.chat.entity.Message;
 import com.vinorsoft.gpt.service.chat.repository.ConversationRepo;
 import com.vinorsoft.gpt.service.chat.repository.MessageRepo;
+import com.vinorsoft.gpt.service.chat.services.interfaces.ApiKeyService;
 import com.vinorsoft.gpt.service.chat.services.interfaces.ConversationService;
 
 @Service
@@ -55,9 +57,12 @@ public class ConversationServiceImpl implements ConversationService {
 
 	@Autowired
 	private Pagination pagination;
-	
+
 	@Autowired
 	ResponseFormat responseFormat;
+
+	@Autowired
+	ApiKeyService apiKeyService;
 
 	@Override
 	public ResponseEntity<Object> save(ConversationDto dto) {
@@ -88,38 +93,56 @@ public class ConversationServiceImpl implements ConversationService {
 	public String updateTitle(String id) {
 		try {
 			Conversation conversation = conversationRepo.getById(UUID.fromString(id));
-			if(!conversation.getTitle().startsWith("Chat ")) {
+			if (!conversation.getTitle().startsWith("Chat ")) {
 				return "This conversation had updated title!";
 			}
 			List<Message> messages = messageRepo.findByConversationId(id);
-			String all_message = "Title this conversation: ";
+			String all_message = "Title this conversation in English: ";
 			for (Message item : messages) {
 				all_message += StringEscapeUtils.escapeJson(item.getContent());
 			}
 
 			// Gọi API get title
 
+			boolean success = false;
+			Integer count = 3;
 			HttpHeaders headers = new HttpHeaders();
 			headers.setContentType(MediaType.APPLICATION_JSON);
 
 			Map<String, Object> requestJson = new HashMap<>();
-			requestJson.put("userid", 0);
+			requestJson.put("key", apiKeyService.getRandom().getKey());
 			requestJson.put("message", all_message);
 			HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestJson, headers);
 
 			String url = "http://localhost:3000/v1/send_message";
-			ResponseEntity<GPTResponseDto> rp = restTemplate.exchange(url, HttpMethod.POST, request,
-					GPTResponseDto.class);
 
-			GPTResponseDto result = rp.getBody();
-			conversation.setTitle(result.getReply());
-			conversationRepo.save(conversation);
+			do {
+				try {
+					ResponseEntity<GPTResponseDto> rp = restTemplate.exchange(url, HttpMethod.POST, request,
+							GPTResponseDto.class);
+					GPTResponseDto result = rp.getBody();
+					String reply = result.getReply().trim();
+					if(reply.startsWith("\n"))
+						reply = reply.substring(1, reply.length());
+					conversation.setTitle(StringEscapeUtils.unescapeJava(reply));
+					conversationRepo.save(conversation);
 
-			logger.info("Conversation " + id + " has updated with title: " + result.getReply());
-			return result.getReply();
-
-		} catch (Exception e) {
+					logger.info("Conversation " + id + " has updated with title: " + StringEscapeUtils.unescapeJava(reply));
+					return result.getReply();
+				} catch (Exception e) {
+					success = false;
+					logger.info(e.toString());
+				}
+				count = count - 1;
+				if (count == 0) {
+					logger.info("Error when update Conversation title! ");
+					return "Error when update Conversation title!";
+				}
+			} while (!success);
 			logger.info("Error when update Conversation title! ");
+			return "Error when update Conversation title!";
+		} catch (Exception e) {
+			logger.info("Error when update Conversation title! "+ e.toString());
 			return "Error when update Conversation title!";
 		}
 	}
@@ -161,9 +184,25 @@ public class ConversationServiceImpl implements ConversationService {
 		try {
 			Conversation conversation = conversationRepo.getById(UUID.fromString(id));
 			return ResponseEntity.ok(conversation);
-		}catch (Exception e) {
-			return responseFormat.response(HttpServletResponse.SC_BAD_GATEWAY, null, "Error get conversation id: " + id);
+		} catch (Exception e) {
+			return responseFormat.response(HttpServletResponse.SC_BAD_GATEWAY, null,
+					"Error get conversation id: " + id);
 		}
+	}
+
+	@Override
+	public Integer deleteBlankConversation(String username) {
+		List<Conversation> conversations = conversationRepo.findByUsername(username);
+		Integer count = 0;
+		for(Conversation item: conversations) {
+			List<Message> messages = messageRepo.findByConversationId(item.getConversationId().toString());
+			if(messages.isEmpty()) {
+				item.setStatus(0);
+				conversationRepo.save(item);
+				count++;
+			}
+		}
+		return count;
 	}
 
 }

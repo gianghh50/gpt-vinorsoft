@@ -8,6 +8,7 @@ import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -38,8 +39,10 @@ import com.vinorsoft.gpt.service.chat.dto.AccountInfoDto;
 import com.vinorsoft.gpt.service.chat.dto.AccountSignUpDto;
 import com.vinorsoft.gpt.service.chat.dto.AccountUpdateInforDto;
 import com.vinorsoft.gpt.service.chat.dto.PaginationDto;
+import com.vinorsoft.gpt.service.chat.dto.StatisticDto;
 import com.vinorsoft.gpt.service.chat.entity.AcceptedMail;
 import com.vinorsoft.gpt.service.chat.entity.Account;
+import com.vinorsoft.gpt.service.chat.entity.LoginHistory;
 import com.vinorsoft.gpt.service.chat.repository.AcceptedMailRepo;
 import com.vinorsoft.gpt.service.chat.repository.AccountRepo;
 import com.vinorsoft.gpt.service.chat.services.interfaces.AccountService;
@@ -381,6 +384,30 @@ public class AccountServiceImpl implements AccountService {
 		logger.info("Cập nhật trạng thái thành công!");
 		return responseFormat.response(HttpServletResponse.SC_OK, null, "Cập nhật trạng thái thành công!");
 	}
+	
+	@Override
+	public ResponseEntity<Object> updateRole(String username, String role) {
+
+		ResponseEntity<Object> accountRes = findByUsername(username);
+		Account account;
+		try {
+			account = (Account) accountRes.getBody();
+		} catch (Exception e) {
+			return accountRes;
+		}
+
+		account.setRole(role);
+		account.setDateModify(new Date());
+
+		try {
+			accountRepo.save(account);
+		} catch (Exception e) {
+			logger.info("Account role update error: " + e.toString());
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null, "Lỗi khi cập nhật vai trò người dùng!");
+		}
+		logger.info("Account role updated!");
+		return responseFormat.response(HttpServletResponse.SC_OK, null, "Cập nhật vai trò thành công!");
+	}
 
 	@Override
 	public ResponseEntity<Object> findAccount(String username) {
@@ -395,4 +422,114 @@ public class AccountServiceImpl implements AccountService {
 		return ResponseEntity.ok(accountInforConverter.toDto(account));
 	}
 
+	@Override
+	public ResponseEntity<Object> updatePassword(String username, String password) {
+		ResponseEntity<Object> accountRes = findByUsername(username);
+		Account account;
+		try {
+			account = (Account) accountRes.getBody();
+		} catch (Exception e) {
+			return accountRes;
+		}
+		account.setPassword(password);
+		account.setDateModify(new Date());
+		try {
+			accountRepo.save(account);
+		} catch (Exception e) {
+			logger.info("Account change password error: " + e.toString());
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null,
+					"Account change password error: " + e.toString());
+		}
+		logger.info("Tài khoản " + username + " thay đổi mật khẩu thành công!");
+		return responseFormat.response(HttpServletResponse.SC_OK, accountInforConverter.toDto(account),
+				"Thay đổi mật khẩu thành công!");
+		
+	}
+
+	@Override
+	public ResponseEntity<Object> quickSignUp(AccountSignUpDto signUpDto) {
+		Map<String, Object> response = new HashMap<>();
+		ResponseEntity<Object> accountRes = findByUsername(signUpDto.getUsername());
+		try {
+			Account account = (Account) accountRes.getBody();
+
+			if (account.getIsActivated() == 0) {
+				accountRepo.delete(account);
+			} else {
+				logger.info("Username " + signUpDto.getUsername() + " đã tồn tại!");
+				return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "duplicate_username",
+						"Username " + signUpDto.getUsername() + " đã tồn tại!");
+			}
+		} catch (Exception e) {
+		}
+
+		// Kiểm tra email, chấp nhận mail có trong danh sách và mail vinorsoft
+		try {
+			List<Account> accounts = accountRepo.findByEmail(signUpDto.getEmail());
+			if (accounts.size() != 0) {
+
+				if (accounts.get(0).getIsActivated() == 0) {
+					accountRepo.delete(accounts.get(0));
+				} else {
+					logger.info("Địa chỉ email " + signUpDto.getEmail() + " đã được sử dụng!");
+					return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, "duplicate_mail",
+							"Địa chỉ email: " + signUpDto.getEmail() + " đã được sử dụng!");
+				}
+			}
+		} catch (Exception e) {
+		}
+
+		Account account = new Account();
+		account.setUsername(signUpDto.getUsername());
+		account.setPassword(signUpDto.getPassword());
+		account.setEmail(signUpDto.getEmail());
+		account.setPhoneNumber(signUpDto.getPhoneNumber());
+		account.setIsActivated(2);
+		account.setRole("user");
+		account.setDateCreate(new Date());
+
+		try {
+			accountRepo.save(account);
+		} catch (Exception ex) {
+			logger.info(ex.toString());
+			logger.info("Lỗi khi tạo tài khoản !");
+			response.put("code", HttpServletResponse.SC_BAD_REQUEST);
+			response.put("data", null);
+			response.put("message", "Lỗi khi tạo tài khoản !");
+			return ResponseEntity.ok(response);
+		}
+		logger.info("Tạo tài khoản thành công!");
+		response.put("code", HttpServletResponse.SC_OK);
+		response.put("data", null);
+		response.put("message", "Tạo tài khoản thành công!");
+		return responseFormat.response(HttpServletResponse.SC_OK, null, "Tạo tài khoản thành công!");
+	}
+
+	@Override
+	@SuppressWarnings("deprecation")
+	public List<StatisticDto> AccountStatistic(Integer months) {
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTime(new Date());
+		calendar.add(Calendar.MONTH, -months);
+		calendar.set(Calendar.DAY_OF_MONTH, 1);
+		Date start_date = calendar.getTime();
+		List<StatisticDto> result = new ArrayList<>();
+		for(Integer i = months - 1; i >= 0; i--) {
+			calendar.setTime(new Date());
+			calendar.add(Calendar.MONTH, - i);
+			result.add(new StatisticDto(calendar.getTime(), 0));
+		}
+		List<Account> accounts = accountRepo.getAccounts(start_date, new Date());
+		for(Account account:accounts) {
+			for(StatisticDto item: result) {
+				if(item.getDate().getMonth() == account.getDateCreate().getMonth() && item.getDate().getYear() == account.getDateCreate().getYear()) {
+					item.setCount(item.getCount() + 1);
+					break;
+				}
+			}
+		}
+		
+		
+		return result;
+	}
 }
