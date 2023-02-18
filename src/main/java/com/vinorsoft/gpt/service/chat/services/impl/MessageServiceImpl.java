@@ -1,5 +1,6 @@
 package com.vinorsoft.gpt.service.chat.services.impl;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
@@ -21,10 +22,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import com.mysql.cj.x.protobuf.MysqlxCursor.Open;
+import com.theokanning.openai.OpenAiService;
+import com.theokanning.openai.completion.CompletionChoice;
+import com.theokanning.openai.completion.CompletionRequest;
 import com.vinorsoft.gpt.service.chat.converter.MessageConverter;
+import com.vinorsoft.gpt.service.chat.custom.OpenAiApi;
 import com.vinorsoft.gpt.service.chat.custom.Pagination;
+import com.vinorsoft.gpt.service.chat.custom.ResponseFormat;
 import com.vinorsoft.gpt.service.chat.dto.GPTResponseDto;
 import com.vinorsoft.gpt.service.chat.dto.MessageDto;
+import com.vinorsoft.gpt.service.chat.dto.OpenAiResponse;
 import com.vinorsoft.gpt.service.chat.dto.PaginationDto;
 import com.vinorsoft.gpt.service.chat.entity.Message;
 import com.vinorsoft.gpt.service.chat.repository.ApiKeyRepo;
@@ -54,14 +62,17 @@ public class MessageServiceImpl implements MessageService {
 
 	@Autowired
 	ApiKeyService apiKeyService;
+	
+	@Autowired
+	ResponseFormat responseFormat;
+	
+	@Autowired
+	OpenAiApi openAiApi;
 
 	@Override
 	public ResponseEntity<Object> save(MessageDto dto) {
 
 		Map<String, Object> response = new HashMap<>();
-
-		// Lấy reply từ GPT
-		GPTResponseDto result = new GPTResponseDto();
 
 		// Lưu message người dùng gửi lên
 		Message message;
@@ -70,63 +81,27 @@ public class MessageServiceImpl implements MessageService {
 			message.setDateCreate(new Date());
 			messageRepo.save(message);
 		} catch (Exception e) {
-			logger.info("Lỗi khi lưu tin nhắn user! ");
-			response.put("code", HttpServletResponse.SC_BAD_REQUEST);
-			response.put("data", null);
-			response.put("message", "Lỗi khi lưu tin nhắn user! ");
-			return ResponseEntity.ok(response);
+			logger.info("Error save message : " + e.toString());
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null, "Lỗi khi lưu tin nhắn user!");
 		}
-		boolean success = false;
-		Integer count = 3;
-		HttpHeaders headers = new HttpHeaders();
-		headers.setContentType(MediaType.APPLICATION_JSON);
 
-		Map<String, Object> requestJson = new HashMap<>();
-		requestJson.put("key", apiKeyService.getRandom().getKey());
-		requestJson.put("message", dto.getContent());
-		HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestJson, headers);
-		String url = "http://localhost:3000/v1/send_message";
-		do {
-			try {
-				ResponseEntity<GPTResponseDto> rp = restTemplate.exchange(url, HttpMethod.POST, request,
-						GPTResponseDto.class);
+		OpenAiResponse answer = openAiApi.openAiDoThis(dto.getContent());
 
-				result = rp.getBody();
-				String reply = result.getReply().trim();
-				if(reply.startsWith("\n"))
-					reply = reply.substring(1, reply.length());
-				result.setReply(reply);
-				break;
-			} catch (Exception e) {
-				success = false;
-			}
-			count = count - 1;
-			if (count == 0) {
-				logger.info("Lỗi request đến GPT API!");
-				response.put("code", HttpServletResponse.SC_BAD_REQUEST);
-				response.put("data", "Error getting response!");
-				response.put("message", "Lỗi request đến GPT API! ");
-				messageRepo.delete(message);
-				return ResponseEntity.ok(response);
-			}
-		} while (!success);
-		
-		
-		// Lưu tin nhắn GPT
+		if (answer.getSuccess() == 0) {
+			messageRepo.delete(message);
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null, "Có lỗi xảy ra. Xin vui lòng thử lại");
+		}
 		Message messageGPT;
 		try {
 			messageGPT = new Message();
-			messageGPT.setContent(result.getReply());
+			messageGPT.setContent(answer.getText());
 			messageGPT.setConversationId(dto.getConversationId());
 			messageGPT.setDateCreate(new Date());
 			messageGPT.setType(0);
 			messageRepo.save(messageGPT);
 		} catch (Exception e) {
-			logger.info("Lỗi khi lưu tin nhắn gpt! ");
-			response.put("code", HttpServletResponse.SC_BAD_REQUEST);
-			response.put("data", null);
-			response.put("message", "Lỗi khi lưu tin nhắn gpt! ");
-			return ResponseEntity.ok(response);
+			logger.info("Error save gpt answer: " + e.toString());
+			return responseFormat.response(HttpServletResponse.SC_BAD_REQUEST, null, "Có lỗi xảy ra. Xin vui lòng thử lại");
 		}
 
 		// Khi hội thoại 6, hoặc 7 câu hoặc có > 120 words thì đặt title
@@ -168,5 +143,4 @@ public class MessageServiceImpl implements MessageService {
 	public List<Message> getMessageByConversationId(String id) {
 		return messageRepo.findByConversationId(id);
 	}
-
 }

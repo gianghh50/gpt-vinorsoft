@@ -69,6 +69,7 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
 				.antMatchers(HttpMethod.POST, "/api/v1/account/quick_sign_up").hasRole(admin)
 				.antMatchers(HttpMethod.GET, "/api/v1/account/statistic/**").hasRole(admin)
 				.antMatchers(HttpMethod.GET, "/api/v1/histories/statistic/**").hasRole(admin)
+				.antMatchers("/api/v1/email**").hasRole(admin)
 				.anyRequest().authenticated();
 
 	}

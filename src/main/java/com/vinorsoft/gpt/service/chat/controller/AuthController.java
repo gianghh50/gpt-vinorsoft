@@ -26,6 +26,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -50,6 +51,7 @@ import com.vinorsoft.gpt.service.chat.security.services.UserDetailsImpl;
 import com.vinorsoft.gpt.service.chat.services.interfaces.AccountService;
 import com.vinorsoft.gpt.service.chat.services.interfaces.ConversationService;
 import com.vinorsoft.gpt.service.chat.services.interfaces.LoginHistoryService;
+import com.vinorsoft.gpt.service.chat.services.interfaces.MessageService;
 
 import io.jsonwebtoken.impl.DefaultClaims;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -57,6 +59,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @RequestMapping("/api/v1/authentication")
 @Tag(name = "Authentication Controller")
+@CrossOrigin(origins = "http://service4all.vinorsoft.com/")
 public class AuthController {
 
 	private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
@@ -81,6 +84,9 @@ public class AuthController {
 	
 	@Autowired
 	LoginHistoryService loginHistoryService;
+	
+	@Autowired
+	MessageService messageService;
 
 	@Autowired
 	JwtUtils jwtUtils;
