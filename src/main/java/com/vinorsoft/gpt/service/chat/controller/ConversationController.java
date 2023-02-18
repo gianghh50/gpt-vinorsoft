@@ -31,7 +31,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 @RestController
 @RequestMapping("/api/v1/")
 @SecurityRequirement(name = "bearerAuth")
-@CrossOrigin("http://localhost:3000")
+@CrossOrigin(origins = "http://service4all.vinorsoft.com/")
 public class ConversationController {
 
 	@Autowired

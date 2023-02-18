@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import com.vinorsoft.gpt.service.chat.dto.MessageDto;
+import com.vinorsoft.gpt.service.chat.dto.OpenAiResponse;
 import com.vinorsoft.gpt.service.chat.dto.PaginationDto;
 import com.vinorsoft.gpt.service.chat.entity.Message;
 

@@ -26,10 +26,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import com.vinorsoft.gpt.service.chat.converter.ConversationConverter;
+import com.vinorsoft.gpt.service.chat.custom.OpenAiApi;
 import com.vinorsoft.gpt.service.chat.custom.Pagination;
 import com.vinorsoft.gpt.service.chat.custom.ResponseFormat;
 import com.vinorsoft.gpt.service.chat.dto.ConversationDto;
 import com.vinorsoft.gpt.service.chat.dto.GPTResponseDto;
+import com.vinorsoft.gpt.service.chat.dto.OpenAiResponse;
 import com.vinorsoft.gpt.service.chat.dto.PaginationDto;
 import com.vinorsoft.gpt.service.chat.entity.Conversation;
 import com.vinorsoft.gpt.service.chat.entity.Message;
@@ -63,6 +65,9 @@ public class ConversationServiceImpl implements ConversationService {
 
 	@Autowired
 	ApiKeyService apiKeyService;
+
+	@Autowired
+	OpenAiApi openAiApi;
 
 	@Override
 	public ResponseEntity<Object> save(ConversationDto dto) {
@@ -104,45 +109,20 @@ public class ConversationServiceImpl implements ConversationService {
 
 			// Gọi API get title
 
-			boolean success = false;
-			Integer count = 3;
-			HttpHeaders headers = new HttpHeaders();
-			headers.setContentType(MediaType.APPLICATION_JSON);
+			OpenAiResponse result = openAiApi.openAiDoThis(all_message);
 
-			Map<String, Object> requestJson = new HashMap<>();
-			requestJson.put("key", apiKeyService.getRandom().getKey());
-			requestJson.put("message", all_message);
-			HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestJson, headers);
-
-			String url = "http://localhost:3000/v1/send_message";
-
-			do {
-				try {
-					ResponseEntity<GPTResponseDto> rp = restTemplate.exchange(url, HttpMethod.POST, request,
-							GPTResponseDto.class);
-					GPTResponseDto result = rp.getBody();
-					String reply = result.getReply().trim();
-					if(reply.startsWith("\n"))
-						reply = reply.substring(1, reply.length());
-					conversation.setTitle(StringEscapeUtils.unescapeJava(reply));
-					conversationRepo.save(conversation);
-
-					logger.info("Conversation " + id + " has updated with title: " + StringEscapeUtils.unescapeJava(reply));
-					return result.getReply();
-				} catch (Exception e) {
-					success = false;
-					logger.info(e.toString());
-				}
-				count = count - 1;
-				if (count == 0) {
-					logger.info("Error when update Conversation title! ");
-					return "Error when update Conversation title!";
-				}
-			} while (!success);
-			logger.info("Error when update Conversation title! ");
-			return "Error when update Conversation title!";
+			if (result.getSuccess() == 1) {
+				logger.info("Conversation " + id + " has updated with title: "
+						+ StringEscapeUtils.unescapeJava(result.getText()));
+				conversation.setTitle(StringEscapeUtils.unescapeJava(result.getText()));
+				conversationRepo.save(conversation);
+				return result.getText();
+			} else {
+				logger.info("Error when update Conversation title! ");
+				return "Error when update Conversation title!";
+			}
 		} catch (Exception e) {
-			logger.info("Error when update Conversation title! "+ e.toString());
+			logger.info("Error when update Conversation title! " + e.toString());
 			return "Error when update Conversation title!";
 		}
 	}
@@ -194,9 +174,9 @@ public class ConversationServiceImpl implements ConversationService {
 	public Integer deleteBlankConversation(String username) {
 		List<Conversation> conversations = conversationRepo.findByUsername(username);
 		Integer count = 0;
-		for(Conversation item: conversations) {
+		for (Conversation item : conversations) {
 			List<Message> messages = messageRepo.findByConversationId(item.getConversationId().toString());
-			if(messages.isEmpty()) {
+			if (messages.isEmpty()) {
 				item.setStatus(0);
 				conversationRepo.save(item);
 				count++;
