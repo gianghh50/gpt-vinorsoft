@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: gpt-service
+  jpa:
+    hibernate:
+      ddl-auto: update
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/db_gpt
+    username: root
+    password: 123
+  main:
+    allow-circular-references: true
+  mail:
+    default-encoding: UTF-8
+    host: smtp.gmail.com
+    username: chatgpt@vinorsoft.com
+    password: Vns@123#456
+    port: 587
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+    
+server:
+  port: 18001
+
+#eureka:
+#  client:
+#    register-with-eureka: true
+#    fetch-registry: true
+#    serviceUrl:
+#      defaultZone: http://localhost:10302/eureka
